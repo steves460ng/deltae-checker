@@ -23,7 +23,7 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic","맑은 고딕",sans-serif;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;}
+  html,body{margin:0;max-width:100%;overflow-x:hidden;}
   body{
     background:var(--booth);
     color:var(--ink);
@@ -67,6 +67,16 @@
   }
   .row input:focus{outline:2px solid var(--field-focus);outline-offset:-1px;border-color:var(--field-focus);}
   .row input.bad{border-color:var(--fail-ink);background:#fff4f3;}
+  .numwrap{flex:1;min-width:0;position:relative;display:block;}
+  .numwrap input{width:100%;padding-right:46px;}
+  .sign{
+    position:absolute;top:4px;bottom:4px;right:4px;width:38px;
+    border:1px solid var(--field-line);background:#e4e4e4;
+    border-radius:3px;font-size:18px;font-weight:700;color:var(--ink);cursor:pointer;
+    line-height:1;padding:0;-webkit-user-select:none;user-select:none;
+  }
+  .sign:active{background:#d2d2d2;}
+  .sign:focus-visible{outline:2px solid var(--field-focus);outline-offset:1px;}
 
   /* 기준선 입력 */
   .control{
@@ -186,22 +196,22 @@
   <div class="inputs">
     <div class="card">
       <h2>기준색 <span class="tag">목표색</span></h2>
-      <div class="row"><label for="rL">L*</label><input id="rL" type="number" step="0.1" min="0" max="100" value="50"></div>
-      <div class="row"><label for="ra">a*</label><input id="ra" type="number" step="0.1" min="-128" max="127" value="20"></div>
-      <div class="row"><label for="rb">b*</label><input id="rb" type="number" step="0.1" min="-128" max="127" value="-30"></div>
+      <div class="row"><label for="rL">L*</label><input id="rL" type="text" inputmode="decimal" autocomplete="off" value="50"></div>
+      <div class="row"><label for="ra">a*</label><span class="numwrap"><input id="ra" type="text" inputmode="decimal" autocomplete="off" value="20"><button type="button" class="sign" data-for="ra" aria-label="a* 부호 전환">±</button></span></div>
+      <div class="row"><label for="rb">b*</label><span class="numwrap"><input id="rb" type="text" inputmode="decimal" autocomplete="off" value="-30"><button type="button" class="sign" data-for="rb" aria-label="b* 부호 전환">±</button></span></div>
     </div>
     <div class="card">
       <h2>측정색 <span class="tag">측정값</span></h2>
-      <div class="row"><label for="mL">L*</label><input id="mL" type="number" step="0.1" min="0" max="100" value="51.2"></div>
-      <div class="row"><label for="ma">a*</label><input id="ma" type="number" step="0.1" min="-128" max="127" value="19.2"></div>
-      <div class="row"><label for="mb">b*</label><input id="mb" type="number" step="0.1" min="-128" max="127" value="-29.6"></div>
+      <div class="row"><label for="mL">L*</label><input id="mL" type="text" inputmode="decimal" autocomplete="off" value="51.2"></div>
+      <div class="row"><label for="ma">a*</label><span class="numwrap"><input id="ma" type="text" inputmode="decimal" autocomplete="off" value="19.2"><button type="button" class="sign" data-for="ma" aria-label="a* 부호 전환">±</button></span></div>
+      <div class="row"><label for="mb">b*</label><span class="numwrap"><input id="mb" type="text" inputmode="decimal" autocomplete="off" value="-29.6"><button type="button" class="sign" data-for="mb" aria-label="b* 부호 전환">±</button></span></div>
     </div>
   </div>
 
   <div class="control">
     <label for="thr">합격 기준 ΔE</label>
-    <input id="thr" type="number" step="0.1" min="0" value="2.0">
-    <span class="note">허용 오차 상한값을 입력하세요.</span>
+    <input id="thr" type="text" inputmode="decimal" autocomplete="off" value="2.0">
+    <span class="note">사내 기준이나 표준 허용치(예: 원색 솔리드 5)를 입력하세요.</span>
   </div>
 
   <div class="swatch-wrap">
@@ -386,6 +396,21 @@
   }
 
   ids.forEach(function(id){ el[id].addEventListener("input",update); });
+
+  // 부호 전환(±) 버튼 : 모바일 소수 키패드에 음수 기호가 없는 문제 대응
+  document.querySelectorAll(".sign").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      var t=el[btn.getAttribute("data-for")];
+      var v=(t.value||"").trim();
+      if(v===""){ t.value="-"; }
+      else if(v==="-"){ t.value=""; }
+      else if(v.charAt(0)==="-"){ t.value=v.slice(1); }
+      else { t.value="-"+v; }
+      update();
+      t.focus();
+    });
+  });
+
   update();
 })();
 </script>

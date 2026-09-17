@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ΔE76 색차 판정기</title>
+<style>
+  :root{
+    --booth:#7d7d7d;       /* 관찰 부스의 중립 회색 주변 */
+    --booth-hi:#8a8a8a;
+    --panel:#f1f1f1;       /* 입력 패널 (밝은 중립) */
+    --panel-line:#d2d2d2;
+    --ink:#1b1b1b;         /* 순수 중립 근사 검정 */
+    --ink-soft:#575757;
+    --field:#ffffff;
+    --field-line:#bfbfbf;
+    --field-focus:#3a3a3a;
+    --pass-ink:#1f6b2b; --pass-fill:#e5f2e6;
+    --warn-ink:#9a5a00; --warn-fill:#f8ecd2;
+    --fail-ink:#a51f18; --fail-fill:#f6ddda;
+    --seam:#ffffff;
+    --radius:4px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic","맑은 고딕",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:var(--booth);
+    color:var(--ink);
+    min-height:100vh;
+    padding:24px 16px 56px;
+    -webkit-font-smoothing:antialiased;
+    font-variant-numeric:tabular-nums;
+  }
+  .wrap{max-width:720px;margin:0 auto;}
+
+  header.app{
+    display:flex;align-items:baseline;justify-content:space-between;
+    gap:12px;flex-wrap:wrap;margin-bottom:20px;color:#f3f3f3;
+  }
+  header.app h1{font-size:20px;font-weight:650;letter-spacing:-0.01em;margin:0;}
+  header.app h1 .sub{font-weight:400;color:#e0e0e0;}
+  header.app .hint{font-size:12.5px;color:#e2e2e2;line-height:1.5;max-width:300px;}
+
+  /* 입력 영역 */
+  .inputs{
+    display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;
+  }
+  .card{
+    background:var(--panel);border:1px solid var(--panel-line);
+    border-radius:var(--radius);padding:16px 16px 14px;
+  }
+  .card h2{
+    font-size:13px;font-weight:600;margin:0 0 12px;color:var(--ink);
+    display:flex;align-items:center;gap:8px;
+  }
+  .card h2 .tag{
+    font-size:11px;font-weight:500;color:var(--ink-soft);
+  }
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .row:last-child{margin-bottom:0;}
+  .row label{width:26px;font-size:14px;color:var(--ink-soft);font-weight:500;}
+  .row input{
+    flex:1;min-width:0;background:var(--field);border:1px solid var(--field-line);
+    border-radius:3px;padding:8px 10px;font:inherit;font-size:15px;color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .row input:focus{outline:2px solid var(--field-focus);outline-offset:-1px;border-color:var(--field-focus);}
+  .row input.bad{border-color:var(--fail-ink);background:#fff4f3;}
+
+  /* 기준선 입력 */
+  .control{
+    background:var(--panel);border:1px solid var(--panel-line);
+    border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .control label{font-size:14px;color:var(--ink);font-weight:500;}
+  .control input{
+    width:88px;background:var(--field);border:1px solid var(--field-line);
+    border-radius:3px;padding:8px 10px;font:inherit;font-size:15px;
+    font-variant-numeric:tabular-nums;
+  }
+  .control input:focus{outline:2px solid var(--field-focus);outline-offset:-1px;border-color:var(--field-focus);}
+  .control .note{font-size:12px;color:var(--ink-soft);}
+
+  /* 색 견본 : 맞댄 분할 필드 */
+  .swatch-wrap{margin-bottom:18px;}
+  .swatch{
+    height:132px;border:1px solid rgba(0,0,0,0.25);border-radius:var(--radius);
+    display:flex;overflow:hidden;position:relative;
+  }
+  .swatch .half{flex:1;position:relative;}
+  .swatch .half.ref{border-right:2px solid var(--seam);}
+  .swatch .cap{
+    position:absolute;bottom:8px;left:8px;font-size:11px;font-weight:600;
+    padding:2px 7px;border-radius:2px;background:rgba(255,255,255,0.82);color:#222;
+  }
+  .swatch .half.meas .cap{left:auto;right:8px;}
+  .swatch-note{font-size:11.5px;color:#eaeaea;margin:7px 2px 0;line-height:1.5;}
+  .swatch-note b{color:#fff;font-weight:600;}
+
+  /* 결과 밴드 */
+  .result{
+    border-radius:var(--radius);padding:20px 20px 18px;
+    transition:background-color .35s ease,color .35s ease;
+    background:var(--pass-fill);color:var(--pass-ink);
+  }
+  .result.warn{background:var(--warn-fill);color:var(--warn-ink);}
+  .result.fail{background:var(--fail-fill);color:var(--fail-ink);}
+  .result.empty{background:#e9e9e9;color:#666;}
+
+  .readout{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+  .de-value{
+    font-size:64px;font-weight:700;line-height:0.9;letter-spacing:-0.02em;
+    font-variant-numeric:tabular-nums;
+  }
+  .de-unit{font-size:15px;font-weight:600;opacity:0.72;margin-bottom:6px;}
+  .verdict{margin-left:auto;text-align:right;display:flex;flex-direction:column;gap:3px;align-items:flex-end;}
+  .verdict .mark{font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .verdict .mark .dot{width:11px;height:11px;border-radius:50%;background:currentColor;display:inline-block;}
+  .verdict .thr{font-size:12.5px;opacity:0.82;}
+
+  .divider{height:1px;background:currentColor;opacity:0.16;margin:16px 0 14px;}
+
+  .components{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .comp{
+    flex:1;min-width:86px;border:1px solid currentColor;border-radius:3px;
+    padding:8px 10px;opacity:0.92;
+  }
+  .comp .k{font-size:11px;opacity:0.7;margin-bottom:2px;}
+  .comp .v{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums;}
+
+  .band-desc{font-size:13.5px;line-height:1.55;}
+  .band-desc .band-range{font-weight:650;}
+
+  /* ΔE76 기준표 */
+  .ref-table{
+    margin-top:18px;background:var(--panel);border:1px solid var(--panel-line);
+    border-radius:var(--radius);overflow:hidden;
+  }
+  .ref-table h3{
+    font-size:13px;font-weight:600;margin:0;padding:13px 16px 11px;color:var(--ink);
+    border-bottom:1px solid var(--panel-line);
+  }
+  .ref-table table{width:100%;border-collapse:collapse;font-size:13px;}
+  .ref-table th,.ref-table td{padding:9px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--panel-line);}
+  .ref-table thead th{font-weight:600;color:var(--ink-soft);font-size:12px;background:#e9e9e9;}
+  .ref-table tbody tr:last-child td{border-bottom:none;}
+  .ref-table td.rng{white-space:nowrap;font-weight:650;font-variant-numeric:tabular-nums;width:74px;color:var(--ink);}
+  .ref-table td.lab{white-space:nowrap;width:96px;}
+  .ref-table .chip{display:inline-block;padding:2px 8px;border-radius:2px;font-size:12px;font-weight:600;}
+  .ref-table .chip.pass{background:var(--pass-fill);color:var(--pass-ink);}
+  .ref-table .chip.warn{background:var(--warn-fill);color:var(--warn-ink);}
+  .ref-table .chip.fail{background:var(--fail-fill);color:var(--fail-ink);}
+  .ref-table td.dsc{color:var(--ink-soft);line-height:1.5;}
+  .ref-table tbody tr.active{background:#fffbe8;}
+  .ref-table tbody tr.active td{box-shadow:inset 0 0 0 9999px rgba(0,0,0,0);}
+  .ref-table tbody tr.active td.rng{position:relative;}
+  .ref-table tbody tr.active td.rng::before{
+    content:"▶";position:absolute;left:2px;top:9px;font-size:9px;color:var(--ink);
+  }
+  .ref-table tbody tr.active td.rng{padding-left:18px;}
+  .ref-note{font-size:11.5px;color:#eaeaea;margin:8px 2px 0;line-height:1.55;}
+
+  footer.foot{margin-top:22px;color:#efefef;font-size:11.5px;line-height:1.6;}
+  footer.foot code{background:rgba(255,255,255,0.16);padding:1px 5px;border-radius:3px;}
+
+  @media (max-width:560px){
+    .inputs{grid-template-columns:1fr;}
+    .de-value{font-size:52px;}
+    .verdict{margin-left:0;text-align:left;align-items:flex-start;}
+    .readout{gap:10px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .result{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <h1>색차 판정기 <span class="sub">ΔE76</span></h1>
+    <p class="hint">기준색과 측정색의 CIELab 값을 넣으면 색차와 판정 결과가 바로 계산됩니다.</p>
+  </header>
+
+  <div class="inputs">
+    <div class="card">
+      <h2>기준색 <span class="tag">목표색</span></h2>
+      <div class="row"><label for="rL">L*</label><input id="rL" type="number" step="0.1" min="0" max="100" value="50"></div>
+      <div class="row"><label for="ra">a*</label><input id="ra" type="number" step="0.1" min="-128" max="127" value="20"></div>
+      <div class="row"><label for="rb">b*</label><input id="rb" type="number" step="0.1" min="-128" max="127" value="-30"></div>
+    </div>
+    <div class="card">
+      <h2>측정색 <span class="tag">측정값</span></h2>
+      <div class="row"><label for="mL">L*</label><input id="mL" type="number" step="0.1" min="0" max="100" value="51.2"></div>
+      <div class="row"><label for="ma">a*</label><input id="ma" type="number" step="0.1" min="-128" max="127" value="19.2"></div>
+      <div class="row"><label for="mb">b*</label><input id="mb" type="number" step="0.1" min="-128" max="127" value="-29.6"></div>
+    </div>
+  </div>
+
+  <div class="control">
+    <label for="thr">합격 기준 ΔE</label>
+    <input id="thr" type="number" step="0.1" min="0" value="2.0">
+    <span class="note">사내 기준이나 표준 허용치(예: 원색 솔리드 5)를 입력하세요.</span>
+  </div>
+
+  <div class="swatch-wrap">
+    <div class="swatch" aria-label="색 견본 미리보기">
+      <div class="half ref"><span class="cap">기준</span></div>
+      <div class="half meas"><span class="cap">측정</span></div>
+    </div>
+    <p class="swatch-note"><b>참고용 화면 표현입니다.</b> 모니터·주변광에 따라 실제 색과 다르며, 판정 근거가 아닙니다. 화면 표현 범위를 벗어난 색은 근사 표시됩니다.</p>
+  </div>
+
+  <div class="result empty" id="result" role="status" aria-live="polite">
+    <div class="readout">
+      <div class="de-value" id="deValue">—</div>
+      <div class="de-unit">ΔE₇₆</div>
+      <div class="verdict">
+        <div class="mark"><span class="dot"></span><span id="verdictText">값 입력 대기</span></div>
+        <div class="thr" id="thrText"></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="components">
+      <div class="comp"><div class="k">ΔL*</div><div class="v" id="dL">—</div></div>
+      <div class="comp"><div class="k">Δa*</div><div class="v" id="da">—</div></div>
+      <div class="comp"><div class="k">Δb*</div><div class="v" id="db">—</div></div>
+    </div>
+    <div class="band-desc" id="bandDesc">기준색과 측정색 값을 입력하면 판정 구간이 표시됩니다.</div>
+  </div>
+
+  <div class="ref-table">
+    <h3>ΔE76 기준표</h3>
+    <table>
+      <thead>
+        <tr><th>ΔE76</th><th>판정</th><th>특징</th></tr>
+      </thead>
+      <tbody id="refBody">
+        <tr data-band="0"><td class="rng">0 ~ 1.0</td><td class="lab"><span class="chip pass">구분 불가</span></td><td class="dsc">사람 눈으로 거의 구분 불가능. 숙련자도 나란히 놓고 봐야 겨우 알아챌 정도.</td></tr>
+        <tr data-band="1"><td class="rng">1.0 ~ 2.5</td><td class="lab"><span class="chip pass">합격선</span></td><td class="dsc">숙련된 관찰자는 인지 가능하나 일반인은 놓치기 쉬움. 품질관리 합격선으로 흔히 잡는 구간.</td></tr>
+        <tr data-band="2"><td class="rng">2.5 ~ 4.0</td><td class="lab"><span class="chip warn">뚜렷한 차이</span></td><td class="dsc">육안으로 뚜렷하게 다르다고 느껴짐. 브랜드 로고·별색은 재작업 대상.</td></tr>
+        <tr data-band="3"><td class="rng">4.0 ~ 6.0</td><td class="lab"><span class="chip fail">불합격</span></td><td class="dsc">명확히 다른 색으로 인지됨. 일반 인쇄물에서도 대부분 불합격.</td></tr>
+        <tr data-band="4"><td class="rng">6.0 이상</td><td class="lab"><span class="chip fail">완전히 다른 색</span></td><td class="dsc">완전히 다른 색으로 인식되는 수준.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="ref-note">계산 결과가 있으면 해당 구간 행이 강조됩니다. 위 구간은 업계 통용 경험치이며, ISO 12647-2(ΔE76 기준) 규정값은 용지 3, CMYK 원색 솔리드 5, 전체 평균 3 이하·최대 6입니다.</p>
+
+  <footer class="foot">
+    ΔE₇₆ = √[(ΔL*)² + (Δa*)² + (Δb*)²] · 측정 조건(광원 D50, 관찰각 등)을 통일해야 값이 의미를 가집니다.<br>
+    구간 판정은 업계 통용 경험치이며 ISO 12647 등 표준 규정값과 다를 수 있습니다.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ΔE76 구간표 (문서 기준). max 미포함(미만).
+  var BANDS = [
+    {max:1.0,  cls:"pass", label:"구분 불가",  range:"0 ~ 1.0",
+     desc:"사람 눈으로 거의 구분 불가능한 수준. 숙련자도 나란히 놓고 봐야 겨우 알아챌 정도."},
+    {max:2.5,  cls:"pass", label:"합격선",     range:"1.0 ~ 2.5",
+     desc:"숙련된 관찰자는 인지 가능하나 일반인은 놓치기 쉬움. 품질관리 합격선으로 흔히 잡는 구간."},
+    {max:4.0,  cls:"warn", label:"뚜렷한 차이", range:"2.5 ~ 4.0",
+     desc:"육안으로 뚜렷하게 다르다고 느껴짐. 브랜드 로고·별색은 재작업 대상."},
+    {max:6.0,  cls:"fail", label:"불합격",     range:"4.0 ~ 6.0",
+     desc:"명확히 다른 색으로 인지됨. 일반 인쇄물에서도 대부분 불합격."},
+    {max:Infinity, cls:"fail", label:"완전히 다른 색", range:"6.0 이상",
+     desc:"완전히 다른 색으로 인식되는 수준."}
+  ];
+
+  var ids=["rL","ra","rb","mL","ma","mb","thr"];
+  var el={};
+  ids.forEach(function(id){ el[id]=document.getElementById(id); });
+  var result=document.getElementById("result");
+  var deValue=document.getElementById("deValue");
+  var verdictText=document.getElementById("verdictText");
+  var thrText=document.getElementById("thrText");
+  var bandDesc=document.getElementById("bandDesc");
+  var dLo=document.getElementById("dL"), dao=document.getElementById("da"), dbo=document.getElementById("db");
+  var refHalf=document.querySelector(".half.ref");
+  var measHalf=document.querySelector(".half.meas");
+  var refRows=document.querySelectorAll("#refBody tr");
+
+  function highlightRow(idx){
+    refRows.forEach(function(tr){
+      tr.classList.toggle("active", parseInt(tr.getAttribute("data-band"),10)===idx);
+    });
+  }
+
+  function num(id){ var v=parseFloat(el[id].value); return isNaN(v)?null:v; }
+
+  function fmt(n,d){ return (n>=0?"+":"") + n.toFixed(d===undefined?2:d); }
+
+  // ---- Lab(D50) -> sRGB 근사 (Bradford D50->D65) ----
+  function labToRgb(L,a,b){
+    var fy=(L+16)/116, fx=fy+a/500, fz=fy-b/200;
+    var e=0.008856, k=903.3;
+    function inv(t){ var t3=t*t*t; return t3>e ? t3 : (116*t-16)/k; }
+    var xr=inv(fx), yr=(L>k*e)?Math.pow((L+16)/116,3):L/k, zr=inv(fz);
+    // D50 white
+    var X=xr*0.9642, Y=yr*1.0, Z=zr*0.8249;
+    // Bradford D50 -> D65
+    var X2= 0.9555766*X -0.0230393*Y +0.0631636*Z;
+    var Y2=-0.0282895*X +1.0099416*Y +0.0210077*Z;
+    var Z2= 0.0122982*X -0.0204830*Y +1.3299098*Z;
+    // XYZ(D65) -> linear sRGB
+    var r= 3.2404542*X2 -1.5371385*Y2 -0.4985314*Z2;
+    var g=-0.9692660*X2 +1.8760108*Y2 +0.0415560*Z2;
+    var bl=0.0556434*X2 -0.2040259*Y2 +1.0572252*Z2;
+    var clipped=false;
+    function gamma(c){
+      if(c<0){c=0;clipped=true;} if(c>1){c=1;clipped=true;}
+      return c<=0.0031308 ? 12.92*c : 1.055*Math.pow(c,1/2.4)-0.055;
+    }
+    var R=Math.round(gamma(r)*255), G=Math.round(gamma(g)*255), B=Math.round(gamma(bl)*255);
+    return {css:"rgb("+R+","+G+","+B+")", clipped:clipped};
+  }
+
+  function setBand(cls){
+    result.className="result"+(cls==="pass"?"":" "+cls);
+  }
+
+  function validate(){
+    var ok=true;
+    [["rL",0,100],["mL",0,100],["ra",-128,127],["rb",-128,127],["ma",-128,127],["mb",-128,127]].forEach(function(r){
+      var v=parseFloat(el[r[0]].value);
+      var bad = el[r[0]].value!=="" && (isNaN(v)||v<r[1]||v>r[2]);
+      el[r[0]].classList.toggle("bad",bad);
+      if(bad) ok=false;
+    });
+    return ok;
+  }
+
+  function update(){
+    validate();
+    var rL=num("rL"), ra=num("ra"), rb=num("rb");
+    var mL=num("mL"), ma=num("ma"), mb=num("mb");
+
+    // 견본 미리보기 (값이 있으면 표시)
+    if(rL!==null&&ra!==null&&rb!==null){
+      var c1=labToRgb(rL,ra,rb); refHalf.style.background=c1.css;
+    } else { refHalf.style.background="transparent"; }
+    if(mL!==null&&ma!==null&&mb!==null){
+      var c2=labToRgb(mL,ma,mb); measHalf.style.background=c2.css;
+    } else { measHalf.style.background="transparent"; }
+
+    var complete = [rL,ra,rb,mL,ma,mb].every(function(v){return v!==null;});
+    if(!complete){
+      result.className="result empty";
+      deValue.textContent="—";
+      verdictText.textContent="값 입력 대기";
+      thrText.textContent="";
+      dLo.textContent=dao.textContent=dbo.textContent="—";
+      bandDesc.textContent="기준색과 측정색 값을 입력하면 판정 구간이 표시됩니다.";
+      highlightRow(-1);
+      return;
+    }
+
+    var dL=rL-mL, da=ra-ma, db=rb-mb;
+    var dE=Math.sqrt(dL*dL+da*da+db*db);
+
+    dLo.textContent=fmt(dL); dao.textContent=fmt(da); dbo.textContent=fmt(db);
+    deValue.textContent=dE.toFixed(2);
+
+    var bandIdx=BANDS.findIndex(function(x){ return dE<x.max; });
+    var band=BANDS[bandIdx];
+    setBand(band.cls);
+    bandDesc.innerHTML='구간 <span class="band-range">'+band.range+'</span> — '+band.desc;
+    highlightRow(bandIdx);
+
+    // 사용자 기준선 판정
+    var thr=num("thr");
+    if(thr!==null){
+      var passThr = dE<=thr+1e-9;
+      verdictText.textContent = passThr ? "합격" : "불합격";
+      thrText.textContent = "기준 ΔE "+thr.toFixed(1)+" "+(passThr?"이하":"초과");
+      // 기준선 판정이 있으면 밴드 색보다 기준선 결과를 우선 반영
+      setBand(passThr ? "pass" : "fail");
+    } else {
+      verdictText.textContent=band.label;
+      thrText.textContent="";
+    }
+  }
+
+  ids.forEach(function(id){ el[id].addEventListener("input",update); });
+  update();
+})();
+</script>
+</body>
+</html>
